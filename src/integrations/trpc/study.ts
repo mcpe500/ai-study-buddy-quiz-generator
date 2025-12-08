@@ -1,9 +1,7 @@
 import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
-import { eq } from 'drizzle-orm'
 import { publicProcedure } from './init'
-import { db } from '@/db'
-import { documents, studyMaterials, quizProgress } from '@/db/schema'
+import { db } from '@/db/repositories'
 import { getUserBySessionId } from '@/lib/auth'
 import { queueDocumentProcessing, getDocumentWithMaterial, getUserDocuments } from '@/lib/jobs'
 import type { TRPCRouterRecord } from '@trpc/server'
@@ -36,13 +34,13 @@ export const studyRouter = {
       const user = await requireAuth(input.sessionId)
       
       // Create document record
-      const [doc] = await db.insert(documents).values({
+      const doc = await db().documents.create({
         userId: user.id,
         fileName: input.fileName,
         mimeType: input.mimeType,
         fileData: input.fileData,
         status: 'pending',
-      }).returning()
+      })
       
       // Queue for background processing
       queueDocumentProcessing(doc.id)
@@ -62,8 +60,7 @@ export const studyRouter = {
     .query(async ({ input }) => {
       const user = await requireAuth(input.sessionId)
       
-      const [doc] = await db.select().from(documents)
-        .where(eq(documents.id, input.documentId))
+      const doc = await db().documents.findById(input.documentId)
       
       if (!doc || doc.userId !== user.id) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Document not found' })
@@ -135,12 +132,12 @@ export const studyRouter = {
     .mutation(async ({ input }) => {
       const user = await requireAuth(input.sessionId)
       
-      const [progress] = await db.insert(quizProgress).values({
+      const progress = await db().quizProgress.create({
         userId: user.id,
         studyMaterialId: input.studyMaterialId,
         score: input.score,
         totalQuestions: input.totalQuestions,
-      }).returning()
+      })
       
       return { id: progress.id }
     }),
@@ -154,14 +151,12 @@ export const studyRouter = {
     .query(async ({ input }) => {
       const user = await requireAuth(input.sessionId)
       
-      let query = db.select().from(quizProgress).where(eq(quizProgress.userId, user.id))
-      
+      let progress
       if (input.studyMaterialId) {
-        query = db.select().from(quizProgress)
-          .where(eq(quizProgress.studyMaterialId, input.studyMaterialId))
+        progress = await db().quizProgress.findByMaterialId(input.studyMaterialId)
+      } else {
+        progress = await db().quizProgress.findByUserId(user.id)
       }
-      
-      const progress = await query
       
       return progress.map(p => ({
         id: p.id,

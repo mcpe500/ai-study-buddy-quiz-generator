@@ -1,6 +1,5 @@
-import { eq } from 'drizzle-orm'
-import { db } from '@/db'
-import { users, sessions, type User, type Session } from '@/db/schema'
+import { db } from '@/db/repositories'
+import type { User, Session } from '@/db/types'
 
 // Simple hash function using Web Crypto API (works in both Node and browser)
 async function hashPassword(password: string): Promise<string> {
@@ -16,30 +15,19 @@ async function verifyPassword(password: string, hash: string): Promise<boolean> 
   return passwordHash === hash
 }
 
-// Generate a random session ID
-function generateSessionId(): string {
-  const array = new Uint8Array(32)
-  crypto.getRandomValues(array)
-  return Array.from(array).map(b => b.toString(16).padStart(2, '0')).join('')
-}
-
 // Session duration: 7 days
 const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000
 
 export async function createUser(email: string, password: string): Promise<User> {
   const passwordHash = await hashPassword(password)
-  
-  const [user] = await db.insert(users).values({
+  return db().users.create({
     email: email.toLowerCase().trim(),
     passwordHash,
-  }).returning()
-  
-  return user
+  })
 }
 
-export async function findUserByEmail(email: string): Promise<User | undefined> {
-  const [user] = await db.select().from(users).where(eq(users.email, email.toLowerCase().trim()))
-  return user
+export async function findUserByEmail(email: string): Promise<User | null> {
+  return db().users.findByEmail(email)
 }
 
 export async function validateCredentials(email: string, password: string): Promise<User | null> {
@@ -52,43 +40,39 @@ export async function validateCredentials(email: string, password: string): Prom
 
 export async function createSession(userId: string): Promise<Session> {
   const expiresAt = new Date(Date.now() + SESSION_DURATION_MS)
-  
-  const [session] = await db.insert(sessions).values({
+  return db().sessions.create({
     userId,
     expiresAt,
-  }).returning()
-  
-  return session
+  })
 }
 
-export async function getSessionById(sessionId: string): Promise<Session | undefined> {
-  const [session] = await db.select().from(sessions).where(eq(sessions.id, sessionId))
+export async function getSessionById(sessionId: string): Promise<Session | null> {
+  const session = await db().sessions.findById(sessionId)
   
-  if (!session) return undefined
+  if (!session) return null
   
   // Check if session is expired
   if (new Date() > session.expiresAt) {
     await deleteSession(sessionId)
-    return undefined
+    return null
   }
   
   return session
 }
 
-export async function getUserBySessionId(sessionId: string): Promise<User | undefined> {
+export async function getUserBySessionId(sessionId: string): Promise<User | null> {
   const session = await getSessionById(sessionId)
-  if (!session) return undefined
+  if (!session) return null
   
-  const [user] = await db.select().from(users).where(eq(users.id, session.userId))
-  return user
+  return db().users.findById(session.userId)
 }
 
 export async function deleteSession(sessionId: string): Promise<void> {
-  await db.delete(sessions).where(eq(sessions.id, sessionId))
+  await db().sessions.delete(sessionId)
 }
 
 export async function deleteUserSessions(userId: string): Promise<void> {
-  await db.delete(sessions).where(eq(sessions.userId, userId))
+  await db().sessions.deleteByUserId(userId)
 }
 
 // Cookie helpers

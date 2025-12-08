@@ -1,8 +1,5 @@
-import { eq } from 'drizzle-orm'
-import { db } from '@/db'
-import { documents, studyMaterials } from '@/db/schema'
+import { db } from '@/db/repositories'
 import { generateStudyMaterial, extractTextFromBase64 } from './ai-provider'
-import type { DocumentStatus } from '@/types/study'
 
 // Process a document in the background
 export async function processDocument(documentId: string): Promise<void> {
@@ -10,10 +7,10 @@ export async function processDocument(documentId: string): Promise<void> {
   
   try {
     // Update status to processing
-    await updateDocumentStatus(documentId, 'processing')
+    await db().documents.updateStatus(documentId, 'processing')
     
     // Get the document
-    const [doc] = await db.select().from(documents).where(eq(documents.id, documentId))
+    const doc = await db().documents.findById(documentId)
     if (!doc) {
       throw new Error('Document not found')
     }
@@ -25,7 +22,7 @@ export async function processDocument(documentId: string): Promise<void> {
     const material = await generateStudyMaterial(content)
     
     // Save the generated material
-    await db.insert(studyMaterials).values({
+    await db().studyMaterials.create({
       documentId: doc.id,
       summary: material.summary,
       flashcards: material.flashcards,
@@ -33,33 +30,19 @@ export async function processDocument(documentId: string): Promise<void> {
     })
     
     // Update status to completed
-    await updateDocumentStatus(documentId, 'completed')
+    await db().documents.updateStatus(documentId, 'completed')
     
     console.log(`[Job] Completed processing for document: ${documentId}`)
   } catch (error) {
     console.error(`[Job] Error processing document ${documentId}:`, error)
     
     // Update status to failed
-    await updateDocumentStatus(
+    await db().documents.updateStatus(
       documentId, 
       'failed', 
       error instanceof Error ? error.message : 'Unknown error'
     )
   }
-}
-
-// Update document status
-async function updateDocumentStatus(
-  documentId: string, 
-  status: DocumentStatus, 
-  errorMessage?: string
-): Promise<void> {
-  await db.update(documents)
-    .set({ 
-      status, 
-      errorMessage: errorMessage || null,
-    })
-    .where(eq(documents.id, documentId))
 }
 
 // Queue a document for processing (runs async, returns immediately)
@@ -75,18 +58,18 @@ export function queueDocumentProcessing(documentId: string): void {
 
 // Get document with its study material
 export async function getDocumentWithMaterial(documentId: string) {
-  const [doc] = await db.select().from(documents).where(eq(documents.id, documentId))
+  const doc = await db().documents.findById(documentId)
   if (!doc) return null
   
-  const [material] = await db.select().from(studyMaterials).where(eq(studyMaterials.documentId, documentId))
+  const material = await db().studyMaterials.findByDocumentId(documentId)
   
   return {
     document: doc,
-    studyMaterial: material || null,
+    studyMaterial: material,
   }
 }
 
 // Get all documents for a user
 export async function getUserDocuments(userId: string) {
-  return db.select().from(documents).where(eq(documents.userId, userId))
+  return db().documents.findByUserId(userId)
 }
