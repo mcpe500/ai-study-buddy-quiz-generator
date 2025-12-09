@@ -32,7 +32,7 @@ export default function QuizMode({ questions, onComplete }: QuizModeProps) {
       setIsAnswered(false)
     } else {
       setShowResults(true)
-      onComplete?.(score + (selectedOption === question.correctAnswerIndex ? 1 : 0), questions.length)
+      onComplete?.(score, questions.length)
     }
   }
 
@@ -49,7 +49,7 @@ export default function QuizMode({ questions, onComplete }: QuizModeProps) {
   }
 
   if (showResults) {
-    const finalScore = score + (selectedOption === question?.correctAnswerIndex ? 1 : 0)
+    const finalScore = score
     const percentage = Math.round((finalScore / questions.length) * 100)
     return (
       <div className="w-full max-w-2xl mx-auto bg-white rounded-3xl shadow-lg border border-slate-100 p-8 text-center">

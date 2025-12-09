@@ -1,20 +1,39 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { extractTextFromBase64 } from '../src/lib/ai-provider'
 
-// Mock pdf-parse module
+// Mock pdf-parse module for unit tests
+const mockGetText = vi.fn().mockResolvedValue({
+  text: 'This is the extracted text from the PDF document. It contains sample educational content for testing purposes.'
+})
+const mockGetInfo = vi.fn().mockResolvedValue({
+  total: 3
+})
+const mockLoad = vi.fn().mockResolvedValue(undefined)
+
+const MockPDFParse = vi.fn().mockImplementation(() => ({
+  load: mockLoad,
+  getText: mockGetText,
+  getInfo: mockGetInfo,
+}))
+
 vi.mock('pdf-parse', () => ({
-  default: vi.fn().mockResolvedValue({
-    numpages: 3,
-    text: 'This is the extracted text from the PDF document. It contains sample educational content for testing purposes.',
-  }),
+  PDFParse: MockPDFParse
 }))
 
 describe('extractTextFromBase64', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // Reset default mock implementations
+    mockGetText.mockResolvedValue({
+      text: 'This is the extracted text from the PDF document. It contains sample educational content for testing purposes.'
+    })
+    mockGetInfo.mockResolvedValue({
+      total: 3
+    })
+    mockLoad.mockResolvedValue(undefined)
   })
 
-  describe('PDF extraction', () => {
+  describe('PDF extraction (mocked)', () => {
     it('should extract text from a PDF base64 string', async () => {
       // Create a simple base64 string (this would be a real PDF in production)
       const base64Data = Buffer.from('dummy pdf content').toString('base64')
@@ -22,6 +41,9 @@ describe('extractTextFromBase64', () => {
 
       const result = await extractTextFromBase64(base64Data, mimeType)
 
+      expect(MockPDFParse).toHaveBeenCalled()
+      expect(mockLoad).toHaveBeenCalled()
+      expect(mockGetText).toHaveBeenCalled()
       expect(result).toBe('This is the extracted text from the PDF document. It contains sample educational content for testing purposes.')
     })
 
@@ -37,10 +59,12 @@ describe('extractTextFromBase64', () => {
     it('should truncate very long PDF text', async () => {
       // Mock a very long text response
       const longText = 'A'.repeat(60000)
-      const pdfParse = (await import('pdf-parse')).default as unknown as ReturnType<typeof vi.fn>
-      pdfParse.mockResolvedValueOnce({
-        numpages: 100,
-        text: longText,
+      
+      mockGetText.mockResolvedValueOnce({
+        text: longText
+      })
+      mockGetInfo.mockResolvedValueOnce({
+        total: 100
       })
 
       const base64Data = Buffer.from('dummy pdf content').toString('base64')
@@ -53,8 +77,7 @@ describe('extractTextFromBase64', () => {
     })
 
     it('should throw error when PDF parsing fails', async () => {
-      const pdfParse = (await import('pdf-parse')).default as unknown as ReturnType<typeof vi.fn>
-      pdfParse.mockRejectedValueOnce(new Error('Invalid PDF structure'))
+      mockLoad.mockRejectedValueOnce(new Error('Invalid PDF structure'))
 
       const base64Data = Buffer.from('invalid pdf').toString('base64')
       const mimeType = 'application/pdf'
@@ -101,3 +124,5 @@ describe('extractTextFromBase64', () => {
     })
   })
 })
+
+

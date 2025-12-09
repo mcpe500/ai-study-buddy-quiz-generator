@@ -227,31 +227,40 @@ export async function extractTextFromBase64(base64Data: string, mimeType: string
     console.log(`${LOG_PREFIX} Detected PDF document, parsing with pdf-parse...`)
     
     try {
-      // Dynamic import pdf-parse and handle module format
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const pdfParseModule = await import('pdf-parse') as any
-      const pdfParse = pdfParseModule.default ?? pdfParseModule
+      // Dynamic import pdf-parse which is v2.x (class-based)
+      // Note: @types/pdf-parse is outdated (v1.x), so we use 'any' for v2.x API
+      const { PDFParse } = await import('pdf-parse')
       
-      // Convert base64 to Buffer
+      // Convert base64 to Uint8Array (required by pdfjs-dist used internally by pdf-parse v2)
       const pdfBuffer = Buffer.from(base64Data, 'base64')
-      console.log(`${LOG_PREFIX} Converted to buffer, size: ${pdfBuffer.length} bytes`)
+      const pdfData = new Uint8Array(pdfBuffer)
+      console.log(`${LOG_PREFIX} Converted to Uint8Array, size: ${pdfData.length} bytes`)
       
-      // Parse the PDF
-      const pdfData = await pdfParse(pdfBuffer)
+      // Parse with pdf-parse v2.x class-based API
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const parser = new PDFParse(pdfData) as any
+      await parser.load()
+      
+      const textResult = await parser.getText()
+      const info = await parser.getInfo()
+      
+      // getText() returns a TextResult object with text property
+      const text = typeof textResult === 'string' ? textResult : 
+                   textResult?.text ?? JSON.stringify(textResult)
       
       console.log(`${LOG_PREFIX} PDF parsed successfully!`)
-      console.log(`${LOG_PREFIX} Pages: ${pdfData.numpages}`)
-      console.log(`${LOG_PREFIX} Extracted text length: ${pdfData.text.length} chars`)
-      console.log(`${LOG_PREFIX} First 500 chars: ${pdfData.text.substring(0, 500)}...`)
+      console.log(`${LOG_PREFIX} Pages: ${info?.total || info?.numPages || 'unknown'}`)
+      console.log(`${LOG_PREFIX} Extracted text length: ${text.length} chars`)
+      console.log(`${LOG_PREFIX} First 500 chars: ${text.substring(0, 500)}...`)
       
       // Return the extracted text, limit to prevent token overflow
       const maxChars = 50000 // ~12k tokens, leaving room for response
-      if (pdfData.text.length > maxChars) {
+      if (text.length > maxChars) {
         console.log(`${LOG_PREFIX} Text too long, truncating to ${maxChars} chars`)
-        return pdfData.text.substring(0, maxChars) + '\n\n[Content truncated due to length...]'
+        return text.substring(0, maxChars) + '\n\n[Content truncated due to length...]'
       }
       
-      return pdfData.text
+      return text
     } catch (error) {
       console.error(`${LOG_PREFIX} PDF parsing failed:`, error)
       throw new Error(`Failed to parse PDF: ${error instanceof Error ? error.message : 'Unknown error'}`)
