@@ -5,7 +5,7 @@ import type {
   StudyMaterial, NewStudyMaterial,
   QuizProgress, NewQuizProgress,
   DocumentStatus,
-} from './types'
+} from '../types'
 
 // Base repository interface
 export interface BaseRepository<T, CreateT> {

@@ -170,7 +170,7 @@ function StudyPage() {
                       Simple Explanation
                     </h3>
                     <div className="prose prose-slate lg:prose-lg max-w-none text-slate-700 leading-relaxed">
-                      {materialData.studyMaterial.summary?.split('\n').map((paragraph, idx) => (
+                      {materialData.studyMaterial.summary?.split('\n').map((paragraph: string, idx: number) => (
                         <p key={idx} className="mb-4">{paragraph}</p>
                       ))}
                     </div>
